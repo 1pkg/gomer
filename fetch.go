@@ -18,6 +18,7 @@ const (
 	bigPageSize = pageSize * 16
 	fetchWindow = time.Hour * 24 * 30
 	apiRetries  = 4
+	cacheDir    = ".cache"
 )
 
 var origin = time.Date(2019, 04, 10, 19, 8, 52, 997264, time.UTC)
@@ -28,15 +29,16 @@ type fetcherParallel struct {
 
 func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 	if f.cache {
-		_ = os.Mkdir("cache", os.ModePerm)
+		_ = os.Mkdir(cacheDir, os.ModePerm)
 	}
 	defer close(ochan)
 	g, ctx := errgroup.WithContext(ctx)
-	t := time.Now().UTC()
-	for t.After(origin) {
-		from, to := t.Add(-fetchWindow), t
-		if from.Before(origin) {
-			from = origin
+	t := origin
+	now := time.Now().UTC()
+	for t.Before(now) {
+		from, to := t, t.Add(fetchWindow)
+		if t.After(now) {
+			to = now
 		}
 		g.Go(func() error {
 			f := fetcherInterval{
@@ -46,7 +48,7 @@ func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 			}
 			return f.fetch(ctx, ochan)
 		})
-		t = from
+		t = to
 	}
 	return g.Wait()
 }
@@ -58,7 +60,8 @@ type fetcherInterval struct {
 
 func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
 	fname := fmt.Sprintf(
-		"cache/page_%s_%s.json",
+		"%s/page_%s_%s.json",
+		cacheDir,
 		f.from.Format(time.RFC3339Nano),
 		f.to.Format(time.RFC3339Nano),
 	)
