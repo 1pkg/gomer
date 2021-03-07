@@ -10,7 +10,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const psize = 2000
+const (
+	psize    = 2000
+	fwindow  = time.Hour * 24 * 30
+	mretries = 4
+)
 
 var origin = time.Date(2019, 04, 10, 19, 8, 52, 997264, time.UTC)
 
@@ -31,7 +35,7 @@ func main() {
 		})
 	}
 	for t.After(origin) {
-		from, to := t.Add(-time.Hour*24*30), t
+		from, to := t.Add(-fwindow), t
 		if from.Before(origin) {
 			from = origin
 		}

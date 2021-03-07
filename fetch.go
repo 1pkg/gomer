@@ -12,8 +12,15 @@ import (
 
 func fetch(ctx context.Context, from, to time.Time, mchan chan<- modv) error {
 	for {
-		mods, err := fpage(ctx, from)
-		if err != nil {
+		var mods []modv
+		if err := retry(ctx, mretries, func(ctx context.Context) error {
+			ms, err := fpage(ctx, from)
+			if err != nil {
+				return err
+			}
+			mods = ms
+			return nil
+		}); err != nil {
 			return err
 		}
 		if len(mods) == 0 {
@@ -59,4 +66,21 @@ func tojson(b []byte) []byte {
 	m := strings.Count(sbuf, "}")
 	sbuf = strings.Replace(string(b), "}", "},", m-1)
 	return []byte(fmt.Sprintf("[%s]", sbuf))
+}
+
+func retry(ctx context.Context, max int, f func(context.Context) error) (err error) {
+	t := time.Second / time.Duration(max)
+	for i := 0; i < max; i++ {
+		if err = f(ctx); err == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			time.Sleep(t)
+			t *= 2
+		}
+	}
+	return
 }
