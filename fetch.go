@@ -14,88 +14,36 @@ import (
 )
 
 const (
-	psize    = 2000
-	fwindow  = time.Hour * 24 * 30
-	mretries = 4
+	pageSize    = 2000
+	bigPageSize = pageSize * 16
+	fetchWindow = time.Hour * 24 * 30
+	apiRetries  = 4
 )
 
-type fetcher interface {
-	fetch(ctx context.Context, ochan chan<- modv) error
+var origin = time.Date(2019, 04, 10, 19, 8, 52, 997264, time.UTC)
+
+type fetcherParallel struct {
+	cache bool
 }
 
-type fcache struct {
-	f fetcher
-}
-
-func (f fcache) fetch(ctx context.Context, ochan chan<- modv) error {
-	defer close(ochan)
-	if ff, err := os.Open("cache.json"); err == nil {
-		b, err := ioutil.ReadAll(ff)
-		if err != nil {
-			return err
-		}
-		mods := make([]modv, 0, psize)
-		if err := json.Unmarshal(b, &mods); err != nil {
-			return err
-		}
-		for _, mod := range mods {
-			ochan <- mod
-		}
-		return ff.Close()
+func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
+	if f.cache {
+		_ = os.Mkdir("cache", os.ModePerm)
 	}
-	ff, err := os.Create("cache.json")
-	if err != nil {
-		return err
-	}
-	if _, err := ff.Write([]byte("[")); err != nil {
-		return err
-	}
-	g, ctx := errgroup.WithContext(ctx)
-	ch := make(chan modv, len(ochan))
-	g.Go(func() error {
-		for mod := range ch {
-			b, err := json.Marshal(mod)
-			if err != nil {
-				return err
-			}
-			if _, err := ff.Write(b); err != nil {
-				return err
-			}
-			if _, err := ff.Write([]byte(",\n")); err != nil {
-				return err
-			}
-			ochan <- mod
-		}
-		return nil
-	})
-	if err := f.f.fetch(ctx, ch); err != nil {
-		return err
-	}
-	if err := g.Wait(); err != nil {
-		return err
-	}
-	if _, err := ff.Seek(-2, os.SEEK_END); err != nil {
-		return err
-	}
-	if _, err := ff.Write([]byte("]")); err != nil {
-		return err
-	}
-	return ff.Close()
-}
-
-type fmulti struct{}
-
-func (f fmulti) fetch(ctx context.Context, ochan chan<- modv) error {
 	defer close(ochan)
 	g, ctx := errgroup.WithContext(ctx)
 	t := time.Now().UTC()
 	for t.After(origin) {
-		from, to := t.Add(-fwindow), t
+		from, to := t.Add(-fetchWindow), t
 		if from.Before(origin) {
 			from = origin
 		}
 		g.Go(func() error {
-			f := fAPI{from: from, to: to}
+			f := fetcherInterval{
+				cache: f.cache,
+				from:  from,
+				to:    to,
+			}
 			return f.fetch(ctx, ochan)
 		})
 		t = from
@@ -103,15 +51,35 @@ func (f fmulti) fetch(ctx context.Context, ochan chan<- modv) error {
 	return g.Wait()
 }
 
-type fAPI struct {
+type fetcherInterval struct {
+	cache    bool
 	from, to time.Time
 }
 
-func (f fAPI) fetch(ctx context.Context, ochan chan<- modv) error {
+func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
+	fname := fmt.Sprintf(
+		"cache/page_%s_%s.json",
+		f.from.Format(time.RFC3339Nano),
+		f.to.Format(time.RFC3339Nano),
+	)
+	cache := make([]modv, 0, bigPageSize)
+	if f.cache {
+		if mods, err := fromFile(ctx, fname); err == nil {
+			for _, mod := range mods {
+				ochan <- mod
+			}
+			return nil
+		}
+	}
+	defer func() {
+		if f.cache {
+			_ = toFile(ctx, fname, cache)
+		}
+	}()
 	for {
 		var mods []modv
-		if err := retry(ctx, mretries, func(ctx context.Context) error {
-			ms, err := fpage(ctx, f.from)
+		if err := retry(ctx, apiRetries, func(ctx context.Context) error {
+			ms, err := fetchAPI(ctx, f.from)
 			if err != nil {
 				return err
 			}
@@ -123,6 +91,7 @@ func (f fAPI) fetch(ctx context.Context, ochan chan<- modv) error {
 		if len(mods) == 0 {
 			return nil
 		}
+		cache = append(cache, mods...)
 		for _, mod := range mods {
 			if mod.Timestamp.After(f.to) {
 				return nil
@@ -133,7 +102,38 @@ func (f fAPI) fetch(ctx context.Context, ochan chan<- modv) error {
 	}
 }
 
-func fpage(ctx context.Context, t time.Time) ([]modv, error) {
+func fromFile(ctx context.Context, fname string) ([]modv, error) {
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, err
+	}
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	mods := make([]modv, 0, bigPageSize)
+	if err := json.Unmarshal(b, &mods); err != nil {
+		return nil, err
+	}
+	return nil, f.Close()
+}
+
+func toFile(ctx context.Context, fname string, mods []modv) error {
+	f, err := os.Create(fname)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(mods)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(b); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+func fetchAPI(ctx context.Context, t time.Time) ([]modv, error) {
 	url := fmt.Sprintf("https://index.golang.org/index?since=%s", t.Format(time.RFC3339Nano))
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -148,14 +148,14 @@ func fpage(ctx context.Context, t time.Time) ([]modv, error) {
 	if err != nil {
 		return nil, err
 	}
-	mods := make([]modv, 0, psize)
-	if err := json.Unmarshal(fjson(b), &mods); err != nil {
+	mods := make([]modv, 0, pageSize)
+	if err := json.Unmarshal(fixJson(b), &mods); err != nil {
 		return nil, err
 	}
 	return mods, nil
 }
 
-func fjson(b []byte) []byte {
+func fixJson(b []byte) []byte {
 	if len(b) == 0 {
 		return []byte("[]")
 	}
@@ -165,12 +165,10 @@ func fjson(b []byte) []byte {
 	return []byte(fmt.Sprintf("[%s]", sbuf))
 }
 
-type action func(context.Context) error
-
-func retry(ctx context.Context, max int, a action) (err error) {
+func retry(ctx context.Context, max int, f func(context.Context) error) (err error) {
 	t := time.Second / time.Duration(max)
 	for i := 0; i < max; i++ {
-		if err = a(ctx); err == nil {
+		if err = f(ctx); err == nil {
 			return
 		}
 		select {
