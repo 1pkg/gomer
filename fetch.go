@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func fetch(ctx context.Context, from, to time.Time, mchan chan<- modv) error {
+func fetch(ctx context.Context, from, to time.Time, ochan chan<- modv) error {
 	for {
 		var mods []modv
 		if err := retry(ctx, mretries, func(ctx context.Context) error {
@@ -30,7 +30,7 @@ func fetch(ctx context.Context, from, to time.Time, mchan chan<- modv) error {
 			if mod.Timestamp.After(to) {
 				return nil
 			}
-			mchan <- mod
+			ochan <- mod
 		}
 		from = mods[len(mods)-1].Timestamp
 	}
@@ -68,10 +68,12 @@ func tojson(b []byte) []byte {
 	return []byte(fmt.Sprintf("[%s]", sbuf))
 }
 
-func retry(ctx context.Context, max int, f func(context.Context) error) (err error) {
+type action func(context.Context) error
+
+func retry(ctx context.Context, max int, a action) (err error) {
 	t := time.Second / time.Duration(max)
 	for i := 0; i < max; i++ {
-		if err = f(ctx); err == nil {
+		if err = a(ctx); err == nil {
 			return
 		}
 		select {

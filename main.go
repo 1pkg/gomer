@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"regexp"
-	"runtime"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -29,11 +28,9 @@ func main() {
 	gp, ctx := errgroup.WithContext(context.Background())
 	ch := make(chan modv, psize*4)
 	t := time.Now().UTC()
-	for i := 0; i < runtime.NumCPU(); i++ {
-		gp.Go(func() error {
-			return process(ctx, ch, regexp.MustCompile(`gopium`))
-		})
-	}
+	gp.Go(func() error {
+		return process(ctx, regexp.MustCompile(`cobra`), ch, printf(true, false))
+	})
 	for t.After(origin) {
 		from, to := t.Add(-fwindow), t
 		if from.Before(origin) {
