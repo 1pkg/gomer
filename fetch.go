@@ -9,9 +9,7 @@ import (
 	"time"
 )
 
-func fmonth(ctx context.Context, y, m int, mchan chan<- modv) error {
-	from := time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(y, time.Month(m), ndays(y, m), 0, 0, 0, 0, time.UTC)
+func fetch(ctx context.Context, from, to time.Time, mchan chan<- modv) error {
 	for {
 		mods, err := fpage(ctx, from)
 		if err != nil {
@@ -31,8 +29,8 @@ func fmonth(ctx context.Context, y, m int, mchan chan<- modv) error {
 }
 
 func fpage(ctx context.Context, t time.Time) ([]modv, error) {
-	url := fmt.Sprintf("https://index.golang.org/index/since=%s", t.String())
-	req, err := http.NewRequest("GET", url, nil)
+	url := fmt.Sprintf("https://index.golang.org/index?since=%s", t.Format(time.RFC3339Nano))
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -45,33 +43,10 @@ func fpage(ctx context.Context, t time.Time) ([]modv, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := make([]modv, 0, 2000)
+	fmt.Println(string(b), url)
+	m := make([]modv, 0, psize)
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
 	return m, nil
-}
-
-func ndays(y, m int) int {
-	leap := y%4 == 0 && (y%100 != 0 || y%400 == 0)
-	d := days[m-1]
-	if leap && m == 2 {
-		d++
-	}
-	return d
-}
-
-var days = [...]int{
-	31,
-	28,
-	31,
-	30,
-	31,
-	30,
-	31,
-	31,
-	30,
-	31,
-	30,
-	31,
 }
