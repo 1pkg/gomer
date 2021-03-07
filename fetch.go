@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -43,10 +44,19 @@ func fpage(ctx context.Context, t time.Time) ([]modv, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(b), url)
-	m := make([]modv, 0, psize)
-	if err := json.Unmarshal(b, &m); err != nil {
+	mods := make([]modv, 0, psize)
+	if err := json.Unmarshal(tojson(b), &mods); err != nil {
 		return nil, err
 	}
-	return m, nil
+	return mods, nil
+}
+
+func tojson(b []byte) []byte {
+	if len(b) == 0 {
+		return []byte("[]")
+	}
+	sbuf := string(b)
+	m := strings.Count(sbuf, "}")
+	sbuf = strings.Replace(string(b), "}", "},", m-1)
+	return []byte(fmt.Sprintf("[%s]", sbuf))
 }
