@@ -33,16 +33,16 @@ func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 	}
 	defer close(ochan)
 	g, ctx := errgroup.WithContext(ctx)
-	t := origin
 	now := time.Now().UTC()
-	for t.Before(now) {
-		from, to := t, t.Add(fetchWindow)
-		if t.After(now) {
+	for t := origin; t.Before(now); {
+		cache, from, to := f.cache, t, t.Add(fetchWindow)
+		if to.After(now) {
 			to = now
+			cache = false
 		}
 		g.Go(func() error {
 			f := fetcherInterval{
-				cache: f.cache,
+				cache: cache,
 				from:  from,
 				to:    to,
 			}
@@ -94,14 +94,14 @@ func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
 		if len(mods) == 0 {
 			return nil
 		}
-		cache = append(cache, mods...)
 		for _, mod := range mods {
 			if mod.Timestamp.After(f.to) {
 				return nil
 			}
+			cache = append(cache, mod)
 			ochan <- mod
 		}
-		f.from = mods[len(mods)-1].Timestamp
+		f.from = mods[len(mods)-1].Timestamp.Add(time.Nanosecond)
 	}
 }
 
@@ -118,7 +118,7 @@ func fromFile(ctx context.Context, fname string) ([]modv, error) {
 	if err := json.Unmarshal(b, &mods); err != nil {
 		return nil, err
 	}
-	return nil, f.Close()
+	return mods, f.Close()
 }
 
 func toFile(ctx context.Context, fname string, mods []modv) error {
