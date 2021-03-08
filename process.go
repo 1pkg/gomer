@@ -15,7 +15,7 @@ loop:
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			break loop
 		case mod, ok := <-ichan:
 			if !ok {
 				break loop
@@ -35,7 +35,13 @@ loop:
 		return mods[i].Timestamp.Before(mods[i].Timestamp)
 	})
 	for _, mod := range mods {
-		fmt.Printf(format+"\n", mod.Path, mod.Version, mod.Timestamp.Format(time.RFC3339Nano))
+		printf(format, mod.Path, mod.Version, mod.Timestamp.Format(time.RFC3339Nano))
 	}
-	return nil
+	return ctx.Err()
+}
+
+func printf(format string, args ...interface{}) {
+	p := strings.Count(format, "%")
+	pp := strings.Count(format, "%%")
+	fmt.Printf(format+"\n", args[:p-2*pp]...)
 }

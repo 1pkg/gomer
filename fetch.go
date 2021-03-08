@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -23,26 +26,28 @@ const (
 
 var origin = time.Date(2019, 04, 10, 19, 8, 52, 997264, time.UTC)
 
-func fetch(ctx context.Context, cache bool) <-chan modv {
+func fetch(ctx context.Context, cache, verbose bool) <-chan modv {
 	ch := make(chan modv, bigPageSize)
-	f := fetcherParallel{cache: cache}
+	f := fetcherParallel{cache, verbose}
 	go func() {
-		if err := f.fetch(ctx, ch); err != nil {
-			panic(err)
+		defer close(ch)
+		if err := f.fetch(ctx, ch); verbose && err != nil {
+			log.Println(err)
 		}
 	}()
 	return ch
 }
 
 type fetcherParallel struct {
-	cache bool
+	cache, verbose bool
 }
 
 func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 	if f.cache {
-		_ = os.Mkdir(cacheDir, os.ModePerm)
+		if err := os.Mkdir(cacheDir, os.ModePerm); f.verbose && err != nil {
+			log.Println(err)
+		}
 	}
-	defer close(ochan)
 	g, ctx := errgroup.WithContext(ctx)
 	now := time.Now().UTC()
 	for t := origin; t.Before(now); {
@@ -52,11 +57,7 @@ func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 			cache = false
 		}
 		g.Go(func() error {
-			f := fetcherInterval{
-				cache: cache,
-				from:  from,
-				to:    to,
-			}
+			f := fetcherInterval{cache, f.verbose, from, to}
 			return f.fetch(ctx, ochan)
 		})
 		t = to
@@ -65,8 +66,8 @@ func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 }
 
 type fetcherInterval struct {
-	cache    bool
-	from, to time.Time
+	cache, verbose bool
+	from, to       time.Time
 }
 
 func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
@@ -78,7 +79,12 @@ func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
 	)
 	cache := make([]modv, 0, bigPageSize)
 	if f.cache {
-		if mods, err := fromFile(ctx, fname); err == nil {
+		mods, err := fromFile(ctx, fname)
+		if err != nil {
+			if f.verbose {
+				log.Println(err)
+			}
+		} else {
 			for _, mod := range mods {
 				ochan <- mod
 			}
@@ -87,12 +93,14 @@ func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
 	}
 	defer func() {
 		if f.cache {
-			_ = toFile(ctx, fname, cache)
+			if err := toFile(ctx, fname, cache); f.verbose && err != nil {
+				log.Println(err)
+			}
 		}
 	}()
 	for {
 		var mods []modv
-		if err := retry(ctx, apiRetries, func(ctx context.Context) error {
+		if err := retry(ctx, f.verbose, apiRetries, func(ctx context.Context) error {
 			ms, err := fetchAPI(ctx, f.from)
 			if err != nil {
 				return err
@@ -133,7 +141,9 @@ func fromFile(ctx context.Context, fname string) ([]modv, error) {
 }
 
 func toFile(ctx context.Context, fname string, mods []modv) error {
-	f, err := os.Create(fname)
+	hash := sha256.Sum256([]byte(fname))
+	tmpname := hex.EncodeToString(hash[:])
+	f, err := ioutil.TempFile("", tmpname)
 	if err != nil {
 		return err
 	}
@@ -144,7 +154,10 @@ func toFile(ctx context.Context, fname string, mods []modv) error {
 	if _, err := f.Write(b); err != nil {
 		return err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), fname)
 }
 
 func fetchAPI(ctx context.Context, t time.Time) ([]modv, error) {
@@ -179,10 +192,13 @@ func fixJson(b []byte) []byte {
 	return []byte(fmt.Sprintf("[%s]", sbuf))
 }
 
-func retry(ctx context.Context, max int, f func(context.Context) error) (err error) {
+func retry(ctx context.Context, verbose bool, max int, f func(context.Context) error) (err error) {
 	t := time.Second / time.Duration(max)
 	for i := 0; i < max; i++ {
 		if err = f(ctx); err == nil {
+			if verbose {
+				fmt.Println(err)
+			}
 			return
 		}
 		select {
