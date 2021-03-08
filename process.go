@@ -7,9 +7,11 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Masterminds/semver/v3"
 )
 
-func process(ctx context.Context, ichan <-chan modv, r *regexp.Regexp, format string) error {
+func process(ctx context.Context, ichan <-chan modv, r *regexp.Regexp, c *semver.Constraints, format string) error {
 	var mods []modv
 loop:
 	for {
@@ -21,6 +23,15 @@ loop:
 				break loop
 			}
 			if r.MatchString(mod.Path) {
+				if c != nil {
+					v, err := semver.NewVersion(mod.Version)
+					if err != nil {
+						continue
+					}
+					if !c.Check(v) {
+						continue
+					}
+				}
 				mods = append(mods, mod)
 			}
 		}
