@@ -20,7 +20,13 @@ func main() {
 	ch := make(chan modv, bigPageSize)
 	f := fetcherParallel{cache: true}
 	gp.Go(func() error {
-		return process(ctx, regexp.MustCompile(`cobra`), ch, printf(true, false))
+		return process(
+			ctx,
+			ch,
+			regexp.MustCompile(`^github.com/spf13/cobra`),
+			sortVersion,
+			printTimestamp|printVersion,
+		)
 	})
 	if err := f.fetch(ctx, ch); err != nil {
 		log.Fatal(err)
