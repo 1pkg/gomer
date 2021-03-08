@@ -9,23 +9,7 @@ import (
 	"time"
 )
 
-const (
-	sortVersion = iota + 1
-	sortTimestamp
-)
-
-const (
-	printVersion = iota + 1
-	printTimestamp
-)
-
-func process(
-	ctx context.Context,
-	ichan <-chan modv,
-	r *regexp.Regexp,
-	sorter int8,
-	printer int8,
-) error {
+func process(ctx context.Context, ichan <-chan modv, r *regexp.Regexp, format string) error {
 	var mods []modv
 loop:
 	for {
@@ -45,26 +29,13 @@ loop:
 		if cmp := strings.Compare(mods[i].Path, mods[j].Path); cmp != 0 {
 			return cmp == -1
 		}
-		switch sorter {
-		case sortTimestamp:
-			return mods[i].Timestamp.Before(mods[i].Timestamp)
-		case sortVersion:
-			return strings.Compare(mods[i].Version, mods[j].Version) == 1
-		default:
-			return false
+		if cmp := strings.Compare(mods[i].Version, mods[j].Version); cmp != 0 {
+			return cmp == 1
 		}
+		return mods[i].Timestamp.Before(mods[i].Timestamp)
 	})
 	for _, mod := range mods {
-		fmt.Print(mod.Path)
-		switch printer {
-		case printVersion:
-			fmt.Print(" ", mod.Version)
-		case printTimestamp:
-			fmt.Print(" ", mod.Timestamp.Format(time.RFC3339))
-		case printVersion | printTimestamp:
-			fmt.Print(" ", mod.Version, " ", mod.Timestamp.Format(time.RFC3339))
-		}
-		fmt.Print("\n")
+		fmt.Printf(format, mod.Path, mod.Version, mod.Timestamp.Format(time.RFC3339Nano))
 	}
 	return nil
 }

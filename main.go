@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"regexp"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 type modv struct {
@@ -16,22 +15,28 @@ type modv struct {
 }
 
 func main() {
-	gp, ctx := errgroup.WithContext(context.Background())
-	ch := make(chan modv, bigPageSize)
-	f := fetcherParallel{cache: true}
-	gp.Go(func() error {
-		return process(
-			ctx,
-			ch,
-			regexp.MustCompile(`^github.com/spf13/cobra`),
-			sortVersion,
-			printTimestamp|printVersion,
-		)
-	})
-	if err := f.fetch(ctx, ch); err != nil {
-		log.Fatal(err)
+	cached := flag.Bool("-cached", false, "")
+	format := flag.String("-format", "%s %s %s\n", "")
+	timeout := flag.Int64("-timeout", 0, "")
+	flag.Parse()
+	name := flag.Arg(0)
+	r, err := regexp.Compile(name)
+	if err != nil {
+		log.Fatal(r)
 	}
-	if err := gp.Wait(); err != nil {
+	ctx := context.Background()
+	if t := *timeout; t > 0 {
+		tctx, cancel := context.WithTimeout(ctx, time.Duration(t))
+		defer cancel()
+		ctx = tctx
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	ch := fetch(ctx, *cached)
+	if err := process(ctx, ch, r, *format); err != nil {
 		log.Fatal(err)
 	}
 }

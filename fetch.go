@@ -23,6 +23,17 @@ const (
 
 var origin = time.Date(2019, 04, 10, 19, 8, 52, 997264, time.UTC)
 
+func fetch(ctx context.Context, cache bool) <-chan modv {
+	ch := make(chan modv, bigPageSize)
+	f := fetcherParallel{cache: cache}
+	go func() {
+		if err := f.fetch(ctx, ch); err != nil {
+			panic(err)
+		}
+	}()
+	return ch
+}
+
 type fetcherParallel struct {
 	cache bool
 }
