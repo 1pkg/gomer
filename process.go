@@ -35,7 +35,7 @@ loop:
 		return mods[i].Timestamp.Before(mods[i].Timestamp)
 	})
 	for _, mod := range mods {
-		fmt.Printf(format, mod.Path, mod.Version, mod.Timestamp.Format(time.RFC3339Nano))
+		fmt.Printf(format+"\n", mod.Path, mod.Version, mod.Timestamp.Format(time.RFC3339Nano))
 	}
 	return nil
 }
