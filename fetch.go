@@ -176,13 +176,13 @@ func fetchAPI(ctx context.Context, t time.Time) ([]modv, error) {
 		return nil, err
 	}
 	mods := make([]modv, 0, pageSize)
-	if err := json.Unmarshal(fixJson(b), &mods); err != nil {
+	if err := json.Unmarshal(fixJSON(b), &mods); err != nil {
 		return nil, err
 	}
 	return mods, nil
 }
 
-func fixJson(b []byte) []byte {
+func fixJSON(b []byte) []byte {
 	if len(b) == 0 {
 		return []byte("[]")
 	}
