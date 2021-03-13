@@ -1,14 +1,14 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/1pkg/gomer/master/gopher.png" alt="gomer"/>
+    <img src="https://raw.githubusercontent.com/1pkg/gomer/master/gopher.png?nocache" alt="gomer"/>
 </p>
 
-# Gomer: cli tool for go module [index](https://index.golang.org/) search
+# Gomer: cli tool for go module index search
 
 [![lint](https://github.com/1pkg/gomer/workflows/lint/badge.svg)](https://github.com/1pkg/gomer/actions?query=workflow%3Alint+branch%3Amaster+)
 [![build](https://github.com/1pkg/gomer/workflows/build/badge.svg)](https://github.com/1pkg/gomer/actions?query=workflow%3Abuild+branch%3Amaster+)
-[![report](https://goreportcard.com/badge/github.com/1pkg/gomer?cache=1)](https://goreportcard.com/report/github.com/1pkg/gomer)
-[![version](https://img.shields.io/github/go-mod/go-version/1pkg/gomer?cache=1)](https://github.com/1pkg/gomer/blob/master/go.mod)
-[![license](https://img.shields.io/github/license/1pkg/gomer?cache=1)](LICENSE)
+[![report](https://goreportcard.com/badge/github.com/1pkg/gomer?nocache)](https://goreportcard.com/report/github.com/1pkg/gomer)
+[![version](https://img.shields.io/github/go-mod/go-version/1pkg/gomer?nocache)](https://github.com/1pkg/gomer/blob/master/go.mod)
+[![license](https://img.shields.io/github/license/1pkg/gomer?nocache)](LICENSE)
 
 `go get -u github.com/1pkg/gomer`
 
