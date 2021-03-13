@@ -27,6 +27,7 @@ func main() {
 	}
 	constraint := flag.String("constraint", "", "cli semver constraint pattern; used only if non empty valid constraint specified")
 	format := flag.String("format", "%s %s %s", "cli printf format for printing a module entry; \\n is auto appended")
+	index := flag.String("index", "https://index.golang.org/index", "cli go module index database url; golang.org index is used by default")
 	nocache := flag.Bool("nocache", false, "cli modules no caching flag; caching is enabled by default (default false)")
 	timeout := flag.Int64("timeout", 0, "cli timeout in seconds; only considered when value bigger than 0 (default 0)")
 	verbose := flag.Bool("verbose", false, "cli verbosity logging flag; verbosity is disabled by default (default false)")
@@ -49,7 +50,7 @@ func main() {
 		defer cancel()
 		ctx = tctx
 	}
-	ch := fetch(ctx, !*nocache, *verbose)
+	ch := fetch(ctx, *index, !*nocache, *verbose)
 	if err := process(ctx, ch, r, c, *format); err != nil {
 		log.Fatal(err)
 	}

@@ -26,9 +26,9 @@ const (
 
 var origin = time.Date(2019, 04, 10, 19, 8, 52, 997264, time.UTC)
 
-func fetch(ctx context.Context, cache, verbose bool) <-chan modv {
+func fetch(ctx context.Context, index string, cache, verbose bool) <-chan modv {
 	ch := make(chan modv, bigPageSize)
-	f := fetcherParallel{cache, verbose}
+	f := fetcherParallel{index, cache, verbose}
 	go func() {
 		defer close(ch)
 		if err := f.fetch(ctx, ch); verbose && err != nil {
@@ -39,6 +39,7 @@ func fetch(ctx context.Context, cache, verbose bool) <-chan modv {
 }
 
 type fetcherParallel struct {
+	index          string
 	cache, verbose bool
 }
 
@@ -57,7 +58,7 @@ func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 			cache = false
 		}
 		g.Go(func() error {
-			f := fetcherInterval{cache, f.verbose, from, to}
+			f := fetcherInterval{f.index, cache, f.verbose, from, to}
 			return f.fetch(ctx, ochan)
 		})
 		t = to
@@ -66,6 +67,7 @@ func (f fetcherParallel) fetch(ctx context.Context, ochan chan<- modv) error {
 }
 
 type fetcherInterval struct {
+	index          string
 	cache, verbose bool
 	from, to       time.Time
 }
@@ -101,7 +103,7 @@ func (f fetcherInterval) fetch(ctx context.Context, ochan chan<- modv) error {
 	for {
 		var mods []modv
 		if err := retry(ctx, f.verbose, apiRetries, func(ctx context.Context) error {
-			ms, err := fetchAPI(ctx, f.from)
+			ms, err := fetchAPI(ctx, f.index, f.from)
 			if err != nil {
 				return err
 			}
@@ -160,8 +162,8 @@ func toFile(ctx context.Context, fname string, mods []modv) error {
 	return os.Rename(f.Name(), fname)
 }
 
-func fetchAPI(ctx context.Context, t time.Time) ([]modv, error) {
-	url := fmt.Sprintf("https://index.golang.org/index?since=%s", t.Format(time.RFC3339Nano))
+func fetchAPI(ctx context.Context, index string, t time.Time) ([]modv, error) {
+	url := fmt.Sprintf("%s?since=%s", index, t.Format(time.RFC3339Nano))
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err

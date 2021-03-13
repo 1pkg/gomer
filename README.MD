@@ -25,6 +25,8 @@ Usage of gomer: [-f val] [-f val] <module_path_regexp>
         cli semver constraint pattern; used only if non empty valid constraint specified
   -format string
         cli printf format for printing a module entry; \n is auto appended (default "%s %s %s")
+  -index string
+        cli go module index database url; golang.org index is used by default (default "https://index.golang.org/index")
   -nocache
         cli modules no caching flag; caching is enabled by default (default false)
   -timeout int
