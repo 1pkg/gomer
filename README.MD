@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/1pkg/gomer/master/gopher.png?nocache" alt="gomer"/>
+    <img src="https://raw.githubusercontent.com/1pkg/gomer/master/gopher.png?nc=1" alt="gomer"/>
 </p>
 
 # Gomer: cli tool for go module index search
